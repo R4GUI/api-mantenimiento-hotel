@@ -6,15 +6,15 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
+// 🧩 Middleware
 app.use(cors());
 app.use(bodyParser.json());
 app.use(express.json());
 
-// Importar Firebase para verificar conexión
+// 🔥 Conexión con Firebase
 const { db } = require('./config/firebase');
 
-// Importar rutas
+// 📦 Importar rutas
 const areasRoutes = require('./routes/areas');
 const tiposRoutes = require('./routes/tipos');
 const equiposRoutes = require('./routes/equipos');
@@ -23,25 +23,25 @@ const refaccionesRoutes = require('./routes/refacciones');
 const historialRoutes = require('./routes/historial');
 const estadisticasRoutes = require('./routes/estadisticas');
 
-// Usar rutas
+// 🚏 Usar rutas (todas en plural para que coincidan con tu frontend Angular)
 app.use('/api/areas', areasRoutes);
 app.use('/api/tipos', tiposRoutes);
 app.use('/api/equipos', equiposRoutes);
-app.use('/api/mantenimiento', mantenimientoRoutes);
+app.use('/api/mantenimientos', mantenimientoRoutes);
 app.use('/api/refacciones', refaccionesRoutes);
 app.use('/api/historial', historialRoutes);
 app.use('/api/estadisticas', estadisticasRoutes);
 
-// Ruta principal
+// 🏠 Ruta principal de prueba
 app.get('/', (req, res) => {
-  res.json({ 
+  res.json({
     mensaje: '🏨 API Hotel Mantenimiento con Firebase',
-    estado: 'Operativo',
+    estado: '✅ Operativo',
     endpoints: {
       areas: '/api/areas',
       tipos: '/api/tipos',
       equipos: '/api/equipos',
-      mantenimiento: '/api/mantenimiento',
+      mantenimientos: '/api/mantenimientos',
       refacciones: '/api/refacciones',
       historial: '/api/historial',
       estadisticas: '/api/estadisticas'
@@ -49,7 +49,8 @@ app.get('/', (req, res) => {
   });
 });
 
+// 🚀 Iniciar servidor
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en: http://localhost:${PORT}`);
-  console.log('✅ Conectado a Firebase Firestore');
+  console.log(`🚀 Servidor corriendo en puerto: ${PORT}`);
+  console.log(`✅ Conectado a Firebase Firestore`);
 });
