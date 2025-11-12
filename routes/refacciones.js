@@ -1,46 +1,52 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../config/database');
-
-// GET - Obtener refacciones por mantenimiento
-router.get('/mantenimiento/:id_mantenimiento', async (req, res) => {
-  try {
-    const [rows] = await db.query(
-      'SELECT * FROM Refacciones WHERE id_mantenimiento = ? ORDER BY fecha_compra DESC',
-      [req.params.id_mantenimiento]
-    );
-    res.json(rows);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+const { db } = require('../config/firebase');
 
 // GET - Obtener todas las refacciones
 router.get('/', async (req, res) => {
   try {
-    const query = `
-      SELECT r.*, m.id_equipo, e.numero_serie
-      FROM Refacciones r
-      INNER JOIN MantenimientoPreventivo m ON r.id_mantenimiento = m.id_mantenimiento
-      INNER JOIN Equipos e ON m.id_equipo = e.id_equipo
-      ORDER BY r.fecha_compra DESC
-    `;
-    const [rows] = await db.query(query);
-    res.json(rows);
+    const snapshot = await db.collection('refacciones').get();
+    const refacciones = [];
+    
+    for (const doc of snapshot.docs) {
+      const refData = doc.data();
+      
+      // Calcular costo total
+      refData.costo_total = refData.cantidad * refData.costo_unitario;
+      
+      refacciones.push({
+        id_refaccion: doc.id,
+        ...refData
+      });
+    }
+    
+    res.json(refacciones);
   } catch (error) {
+    console.error('Error al obtener refacciones:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// GET - Obtener refacción por ID
-router.get('/:id', async (req, res) => {
+// GET - Obtener refacciones por mantenimiento
+router.get('/mantenimiento/:id', async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM Refacciones WHERE id_refaccion = ?', [req.params.id]);
-    if (rows.length === 0) {
-      return res.status(404).json({ message: 'Refacción no encontrada' });
-    }
-    res.json(rows[0]);
+    const snapshot = await db.collection('refacciones')
+      .where('id_mantenimiento', '==', req.params.id)
+      .get();
+    
+    const refacciones = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      data.costo_total = data.cantidad * data.costo_unitario;
+      refacciones.push({ 
+        id_refaccion: doc.id, 
+        ...data 
+      });
+    });
+    
+    res.json(refacciones);
   } catch (error) {
+    console.error('Error al obtener refacciones:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -48,16 +54,35 @@ router.get('/:id', async (req, res) => {
 // POST - Crear nueva refacción
 router.post('/', async (req, res) => {
   try {
-    const { id_mantenimiento, folio_compra, descripcion, cantidad, costo_unitario, proveedor, fecha_compra } = req.body;
-    const [result] = await db.query(
-      'INSERT INTO Refacciones (id_mantenimiento, folio_compra, descripcion, cantidad, costo_unitario, proveedor, fecha_compra) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id_mantenimiento, folio_compra, descripcion, cantidad, costo_unitario, proveedor, fecha_compra]
-    );
+    const refaccionData = {
+      id_mantenimiento: req.body.id_mantenimiento,
+      folio_compra: req.body.folio_compra,
+      descripcion: req.body.descripcion,
+      cantidad: parseInt(req.body.cantidad) || 1,
+      costo_unitario: parseFloat(req.body.costo_unitario) || 0,
+      proveedor: req.body.proveedor || '',
+      created_at: new Date().toISOString()
+    };
+    
+    // Validación
+    if (!refaccionData.id_mantenimiento || !refaccionData.descripcion) {
+      return res.status(400).json({ 
+        error: 'Mantenimiento y descripción son requeridos' 
+      });
+    }
+    
+    // Calcular costo total
+    refaccionData.costo_total = refaccionData.cantidad * refaccionData.costo_unitario;
+    
+    const docRef = await db.collection('refacciones').add(refaccionData);
+    
     res.status(201).json({
-      id_refaccion: result.insertId,
-      message: 'Refacción registrada exitosamente'
+      id_refaccion: docRef.id,
+      ...refaccionData,
+      message: 'Refacción creada exitosamente'
     });
   } catch (error) {
+    console.error('Error al crear refacción:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -65,16 +90,24 @@ router.post('/', async (req, res) => {
 // PUT - Actualizar refacción
 router.put('/:id', async (req, res) => {
   try {
-    const { id_mantenimiento, folio_compra, descripcion, cantidad, costo_unitario, proveedor, fecha_compra } = req.body;
-    const [result] = await db.query(
-      'UPDATE Refacciones SET id_mantenimiento = ?, folio_compra = ?, descripcion = ?, cantidad = ?, costo_unitario = ?, proveedor = ?, fecha_compra = ? WHERE id_refaccion = ?',
-      [id_mantenimiento, folio_compra, descripcion, cantidad, costo_unitario, proveedor, fecha_compra, req.params.id]
-    );
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Refacción no encontrada' });
-    }
+    const updateData = {
+      id_mantenimiento: req.body.id_mantenimiento,
+      folio_compra: req.body.folio_compra,
+      descripcion: req.body.descripcion,
+      cantidad: parseInt(req.body.cantidad) || 1,
+      costo_unitario: parseFloat(req.body.costo_unitario) || 0,
+      proveedor: req.body.proveedor || '',
+      updated_at: new Date().toISOString()
+    };
+    
+    // Calcular costo total
+    updateData.costo_total = updateData.cantidad * updateData.costo_unitario;
+    
+    await db.collection('refacciones').doc(req.params.id).update(updateData);
+    
     res.json({ message: 'Refacción actualizada exitosamente' });
   } catch (error) {
+    console.error('Error al actualizar refacción:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -82,12 +115,10 @@ router.put('/:id', async (req, res) => {
 // DELETE - Eliminar refacción
 router.delete('/:id', async (req, res) => {
   try {
-    const [result] = await db.query('DELETE FROM Refacciones WHERE id_refaccion = ?', [req.params.id]);
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Refacción no encontrada' });
-    }
+    await db.collection('refacciones').doc(req.params.id).delete();
     res.json({ message: 'Refacción eliminada exitosamente' });
   } catch (error) {
+    console.error('Error al eliminar refacción:', error);
     res.status(500).json({ error: error.message });
   }
 });

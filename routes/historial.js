@@ -1,64 +1,72 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../config/database');
-
-// GET - Obtener historial por equipo
-router.get('/equipo/:id_equipo', async (req, res) => {
-  try {
-    const [rows] = await db.query(
-      'SELECT * FROM HistorialEquipo WHERE id_equipo = ? ORDER BY fecha_evento DESC',
-      [req.params.id_equipo]
-    );
-    res.json(rows);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+const { db } = require('../config/firebase');
 
 // GET - Obtener todo el historial
 router.get('/', async (req, res) => {
   try {
-    const query = `
-      SELECT h.*, e.numero_serie, a.nombre_area, t.nombre_tipo
-      FROM HistorialEquipo h
-      INNER JOIN Equipos e ON h.id_equipo = e.id_equipo
-      INNER JOIN Areas a ON e.id_area = a.id_area
-      INNER JOIN Tipos t ON e.id_tipo = t.id_tipo
-      ORDER BY h.fecha_evento DESC
-    `;
-    const [rows] = await db.query(query);
-    res.json(rows);
+    const snapshot = await db.collection('historial_equipos')
+      .orderBy('fecha_modificacion', 'desc')
+      .get();
+    
+    const historial = [];
+    snapshot.forEach(doc => {
+      historial.push({ 
+        id_historial: doc.id, 
+        ...doc.data() 
+      });
+    });
+    
+    res.json(historial);
   } catch (error) {
+    console.error('Error al obtener historial:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// POST - Crear nuevo registro de historial
+// GET - Obtener historial por equipo
+router.get('/equipo/:id', async (req, res) => {
+  try {
+    const snapshot = await db.collection('historial_equipos')
+      .where('id_equipo', '==', req.params.id)
+      .orderBy('fecha_modificacion', 'desc')
+      .get();
+    
+    const historial = [];
+    snapshot.forEach(doc => {
+      historial.push({ 
+        id_historial: doc.id, 
+        ...doc.data() 
+      });
+    });
+    
+    res.json(historial);
+  } catch (error) {
+    console.error('Error al obtener historial:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST - Agregar entrada al historial
 router.post('/', async (req, res) => {
   try {
-    const { id_equipo, fecha_evento, tipo_evento, descripcion, realizado_por, costo } = req.body;
-    const [result] = await db.query(
-      'INSERT INTO HistorialEquipo (id_equipo, fecha_evento, tipo_evento, descripcion, realizado_por, costo) VALUES (?, ?, ?, ?, ?, ?)',
-      [id_equipo, fecha_evento, tipo_evento, descripcion, realizado_por, costo]
-    );
+    const historialData = {
+      id_equipo: req.body.id_equipo,
+      numero_serie: req.body.numero_serie,
+      fecha_modificacion: new Date().toISOString(),
+      tipo_modificacion: req.body.tipo_modificacion,
+      descripcion: req.body.descripcion
+    };
+    
+    const docRef = await db.collection('historial_equipos').add(historialData);
+    
     res.status(201).json({
-      id_historial: result.insertId,
-      message: 'Registro de historial creado exitosamente'
+      id_historial: docRef.id,
+      ...historialData,
+      message: 'Entrada de historial creada exitosamente'
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// DELETE - Eliminar registro de historial
-router.delete('/:id', async (req, res) => {
-  try {
-    const [result] = await db.query('DELETE FROM HistorialEquipo WHERE id_historial = ?', [req.params.id]);
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Registro no encontrado' });
-    }
-    res.json({ message: 'Registro eliminado exitosamente' });
-  } catch (error) {
+    console.error('Error al crear historial:', error);
     res.status(500).json({ error: error.message });
   }
 });

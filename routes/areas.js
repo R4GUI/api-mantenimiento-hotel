@@ -1,13 +1,18 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../config/database');
+const { db } = require('../config/firebase');
 
 // GET - Obtener todas las áreas
 router.get('/', async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM Areas ORDER BY nombre_area');
-    res.json(rows);
+    const snapshot = await db.collection('areas').get();
+    const areas = [];
+    snapshot.forEach(doc => {
+      areas.push({ id_area: doc.id, ...doc.data() });
+    });
+    res.json(areas);
   } catch (error) {
+    console.error('Error al obtener áreas:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -15,12 +20,13 @@ router.get('/', async (req, res) => {
 // GET - Obtener área por ID
 router.get('/:id', async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM Areas WHERE id_area = ?', [req.params.id]);
-    if (rows.length === 0) {
+    const doc = await db.collection('areas').doc(req.params.id).get();
+    if (!doc.exists) {
       return res.status(404).json({ message: 'Área no encontrada' });
     }
-    res.json(rows[0]);
+    res.json({ id_area: doc.id, ...doc.data() });
   } catch (error) {
+    console.error('Error al obtener área:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -29,17 +35,26 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { nombre_area, descripcion } = req.body;
-    const [result] = await db.query(
-      'INSERT INTO Areas (nombre_area, descripcion) VALUES (?, ?)',
-      [nombre_area, descripcion]
-    );
+    
+    // Validación
+    if (!nombre_area) {
+      return res.status(400).json({ error: 'El nombre del área es requerido' });
+    }
+    
+    const docRef = await db.collection('areas').add({
+      nombre_area,
+      descripcion: descripcion || '',
+      created_at: new Date().toISOString()
+    });
+    
     res.status(201).json({
-      id_area: result.insertId,
+      id_area: docRef.id,
       nombre_area,
       descripcion,
       message: 'Área creada exitosamente'
     });
   } catch (error) {
+    console.error('Error al crear área:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -48,15 +63,16 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { nombre_area, descripcion } = req.body;
-    const [result] = await db.query(
-      'UPDATE Areas SET nombre_area = ?, descripcion = ? WHERE id_area = ?',
-      [nombre_area, descripcion, req.params.id]
-    );
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Área no encontrada' });
-    }
+    
+    await db.collection('areas').doc(req.params.id).update({
+      nombre_area,
+      descripcion: descripcion || '',
+      updated_at: new Date().toISOString()
+    });
+    
     res.json({ message: 'Área actualizada exitosamente' });
   } catch (error) {
+    console.error('Error al actualizar área:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -64,12 +80,10 @@ router.put('/:id', async (req, res) => {
 // DELETE - Eliminar área
 router.delete('/:id', async (req, res) => {
   try {
-    const [result] = await db.query('DELETE FROM Areas WHERE id_area = ?', [req.params.id]);
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Área no encontrada' });
-    }
+    await db.collection('areas').doc(req.params.id).delete();
     res.json({ message: 'Área eliminada exitosamente' });
   } catch (error) {
+    console.error('Error al eliminar área:', error);
     res.status(500).json({ error: error.message });
   }
 });

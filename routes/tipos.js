@@ -1,13 +1,18 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../config/database');
+const { db } = require('../config/firebase');
 
 // GET - Obtener todos los tipos
 router.get('/', async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM Tipos ORDER BY nombre_tipo');
-    res.json(rows);
+    const snapshot = await db.collection('tipos').get();
+    const tipos = [];
+    snapshot.forEach(doc => {
+      tipos.push({ id_tipo: doc.id, ...doc.data() });
+    });
+    res.json(tipos);
   } catch (error) {
+    console.error('Error al obtener tipos:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -15,12 +20,13 @@ router.get('/', async (req, res) => {
 // GET - Obtener tipo por ID
 router.get('/:id', async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM Tipos WHERE id_tipo = ?', [req.params.id]);
-    if (rows.length === 0) {
+    const doc = await db.collection('tipos').doc(req.params.id).get();
+    if (!doc.exists) {
       return res.status(404).json({ message: 'Tipo no encontrado' });
     }
-    res.json(rows[0]);
+    res.json({ id_tipo: doc.id, ...doc.data() });
   } catch (error) {
+    console.error('Error al obtener tipo:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -29,17 +35,26 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { nombre_tipo, descripcion } = req.body;
-    const [result] = await db.query(
-      'INSERT INTO Tipos (nombre_tipo, descripcion) VALUES (?, ?)',
-      [nombre_tipo, descripcion]
-    );
+    
+    // Validación
+    if (!nombre_tipo) {
+      return res.status(400).json({ error: 'El nombre del tipo es requerido' });
+    }
+    
+    const docRef = await db.collection('tipos').add({
+      nombre_tipo,
+      descripcion: descripcion || '',
+      created_at: new Date().toISOString()
+    });
+    
     res.status(201).json({
-      id_tipo: result.insertId,
+      id_tipo: docRef.id,
       nombre_tipo,
       descripcion,
       message: 'Tipo creado exitosamente'
     });
   } catch (error) {
+    console.error('Error al crear tipo:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -48,15 +63,16 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { nombre_tipo, descripcion } = req.body;
-    const [result] = await db.query(
-      'UPDATE Tipos SET nombre_tipo = ?, descripcion = ? WHERE id_tipo = ?',
-      [nombre_tipo, descripcion, req.params.id]
-    );
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Tipo no encontrado' });
-    }
+    
+    await db.collection('tipos').doc(req.params.id).update({
+      nombre_tipo,
+      descripcion: descripcion || '',
+      updated_at: new Date().toISOString()
+    });
+    
     res.json({ message: 'Tipo actualizado exitosamente' });
   } catch (error) {
+    console.error('Error al actualizar tipo:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -64,12 +80,10 @@ router.put('/:id', async (req, res) => {
 // DELETE - Eliminar tipo
 router.delete('/:id', async (req, res) => {
   try {
-    const [result] = await db.query('DELETE FROM Tipos WHERE id_tipo = ?', [req.params.id]);
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Tipo no encontrado' });
-    }
+    await db.collection('tipos').doc(req.params.id).delete();
     res.json({ message: 'Tipo eliminado exitosamente' });
   } catch (error) {
+    console.error('Error al eliminar tipo:', error);
     res.status(500).json({ error: error.message });
   }
 });

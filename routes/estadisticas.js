@@ -1,79 +1,110 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../config/database');
+const { db } = require('../config/firebase');
 
 // GET - Obtener estadísticas generales
 router.get('/', async (req, res) => {
   try {
-    const [totalEquipos] = await db.query('SELECT COUNT(*) as total FROM Equipos');
-    const [equiposOperativos] = await db.query("SELECT COUNT(*) as total FROM Equipos WHERE estado = 'Operativo'");
-    const [mantenimientosPendientes] = await db.query("SELECT COUNT(*) as total FROM MantenimientoPreventivo WHERE estado = 'Programado'");
-    const [costoRefacciones] = await db.query('SELECT COALESCE(SUM(costo_total), 0) as total FROM Refacciones');
-    const [costoHistorial] = await db.query('SELECT COALESCE(SUM(costo), 0) as total FROM HistorialEquipo');
-
-    const estadisticas = {
-      totalEquipos: totalEquipos[0].total,
-      equiposOperativos: equiposOperativos[0].total,
-      mantenimientosPendientes: mantenimientosPendientes[0].total,
-      costoTotal: parseFloat(costoRefacciones[0].total) + parseFloat(costoHistorial[0].total)
-    };
-
-    res.json(estadisticas);
+    // Contar equipos totales
+    const equiposSnapshot = await db.collection('equipos').get();
+    const totalEquipos = equiposSnapshot.size;
+    
+    // Contar equipos operativos
+    const operativosSnapshot = await db.collection('equipos')
+      .where('estado', '==', 'Operativo')
+      .get();
+    const equiposOperativos = operativosSnapshot.size;
+    
+    // Contar mantenimientos pendientes
+    const pendientesSnapshot = await db.collection('mantenimientos')
+      .where('estado', '==', 'Pendiente')
+      .get();
+    const mantenimientosPendientes = pendientesSnapshot.size;
+    
+    // Calcular costo total de refacciones
+    const refaccionesSnapshot = await db.collection('refacciones').get();
+    let costoTotal = 0;
+    refaccionesSnapshot.forEach(doc => {
+      const data = doc.data();
+      costoTotal += (data.cantidad * data.costo_unitario) || 0;
+    });
+    
+    res.json({
+      totalEquipos,
+      equiposOperativos,
+      mantenimientosPendientes,
+      costoTotal: costoTotal.toFixed(2)
+    });
   } catch (error) {
+    console.error('Error al obtener estadísticas:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// GET - Equipos por área
-router.get('/equipos-por-area', async (req, res) => {
+// GET - Estadísticas por área
+router.get('/areas', async (req, res) => {
   try {
-    const query = `
-      SELECT a.nombre_area, COUNT(e.id_equipo) as cantidad
-      FROM Areas a
-      LEFT JOIN Equipos e ON a.id_area = e.id_area
-      GROUP BY a.id_area, a.nombre_area
-      ORDER BY cantidad DESC
-    `;
-    const [rows] = await db.query(query);
-    res.json(rows);
+    const areasSnapshot = await db.collection('areas').get();
+    const estadisticasPorArea = [];
+    
+    for (const areaDoc of areasSnapshot.docs) {
+      const areaData = areaDoc.data();
+      
+      // Contar equipos en esta área
+      const equiposSnapshot = await db.collection('equipos')
+        .where('id_area', '==', areaDoc.id)
+        .get();
+      
+      estadisticasPorArea.push({
+        id_area: areaDoc.id,
+        nombre_area: areaData.nombre_area,
+        total_equipos: equiposSnapshot.size
+      });
+    }
+    
+    res.json(estadisticasPorArea);
   } catch (error) {
+    console.error('Error al obtener estadísticas por área:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// GET - Equipos por tipo
-router.get('/equipos-por-tipo', async (req, res) => {
+// GET - Próximos mantenimientos
+router.get('/proximos-mantenimientos', async (req, res) => {
   try {
-    const query = `
-      SELECT t.nombre_tipo, COUNT(e.id_equipo) as cantidad
-      FROM Tipos t
-      LEFT JOIN Equipos e ON t.id_tipo = e.id_tipo
-      GROUP BY t.id_tipo, t.nombre_tipo
-      ORDER BY cantidad DESC
-    `;
-    const [rows] = await db.query(query);
-    res.json(rows);
+    const hoy = new Date().toISOString().split('T')[0];
+    const snapshot = await db.collection('mantenimientos')
+      .where('estado', '==', 'Pendiente')
+      .where('fecha_programada', '>=', hoy)
+      .orderBy('fecha_programada', 'asc')
+      .limit(10)
+      .get();
+    
+    const proximosMantenimientos = [];
+    for (const doc of snapshot.docs) {
+      const mantData = doc.data();
+      
+      // Obtener info del equipo
+      let equipoData = {};
+      if (mantData.id_equipo) {
+        const equipoDoc = await db.collection('equipos').doc(mantData.id_equipo).get();
+        if (equipoDoc.exists) {
+          equipoData = equipoDoc.data();
+        }
+      }
+      
+      proximosMantenimientos.push({
+        id_mantenimiento: doc.id,
+        ...mantData,
+        numero_serie: equipoData.numero_serie || '',
+        marca: equipoData.marca || '',
+        modelo: equipoData.modelo || ''
+      });
+    }
+    
+    res.json(proximosMantenimientos);
   } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// GET - Mantenimientos por mes
-router.get('/mantenimientos-por-mes', async (req, res) => {
-  try {
-    const query = `
-      SELECT 
-        YEAR(fecha_programada) as año,
-        MONTH(fecha_programada) as mes,
-        COUNT(*) as cantidad
-      FROM MantenimientoPreventivo
-      WHERE fecha_programada >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
-      GROUP BY año, mes
-      ORDER BY año DESC, mes DESC
-    `;
-    const [rows] = await db.query(query);
-    res.json(rows);
-  } catch (error) {
+    console.error('Error al obtener próximos mantenimientos:', error);
     res.status(500).json({ error: error.message });
   }
 });
