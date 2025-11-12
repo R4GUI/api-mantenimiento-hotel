@@ -1,37 +1,32 @@
-const admin = require('firebase-admin');
+// Importa Firebase Admin SDK
+import admin from "firebase-admin";
 
-// Para producción (Render)
-if (process.env.NODE_ENV === 'production') {
-  // Verificar que las variables existan
-  if (!process.env.FIREBASE_PRIVATE_KEY) {
-    console.error('❌ Error: FIREBASE_PRIVATE_KEY no está configurada');
-    console.log('Variables disponibles:', Object.keys(process.env).filter(key => key.startsWith('FIREBASE')));
-  }
+// Verifica que exista la variable de entorno
+if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+  throw new Error("❌ La variable FIREBASE_SERVICE_ACCOUNT no está configurada.");
+}
 
+// Intenta parsear el JSON de la variable
+let serviceAccount;
+try {
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+} catch (error) {
+  console.error("❌ Error al parsear FIREBASE_SERVICE_ACCOUNT:", error);
+  throw new Error("La variable FIREBASE_SERVICE_ACCOUNT no contiene un JSON válido.");
+}
+
+// Valida que contenga el project_id
+if (!serviceAccount.project_id) {
+  throw new Error('❌ FIREBASE_SERVICE_ACCOUNT no contiene "project_id"');
+}
+
+// Inicializa Firebase
+if (!admin.apps.length) {
   admin.initializeApp({
-    credential: admin.credential.cert({
-      type: "service_account",
-      project_id: process.env.FIREBASE_PROJECT_ID,
-      private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
-      private_key: process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined,
-      client_email: process.env.FIREBASE_CLIENT_EMAIL,
-      client_id: process.env.FIREBASE_CLIENT_ID,
-      auth_uri: "https://accounts.google.com/o/oauth2/auth",
-      token_uri: "https://oauth2.googleapis.com/token",
-      auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
-      client_x509_cert_url: process.env.FIREBASE_CERT_URL
-    })
-  });
-} else {
-  // Para desarrollo local
-  const serviceAccount = require('../serviceAccountKey.json');
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
+    credential: admin.credential.cert(serviceAccount),
   });
 }
 
-const db = admin.firestore();
-
-console.log('✅ Firebase Firestore conectado correctamente');
-
-module.exports = { db, admin };
+// Exporta Firestore y Auth
+export const db = admin.firestore();
+export const auth = admin.auth();
