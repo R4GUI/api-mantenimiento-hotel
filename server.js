@@ -6,15 +6,15 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 🧩 Middleware
+// Middleware
 app.use(cors());
 app.use(bodyParser.json());
 app.use(express.json());
 
-// 🔥 Conexión con Firebase
+// Importar Firebase para verificar conexión
 const { db } = require('./config/firebase');
 
-// 📦 Importar rutas
+// Importar rutas
 const areasRoutes = require('./routes/areas');
 const tiposRoutes = require('./routes/tipos');
 const equiposRoutes = require('./routes/equipos');
@@ -22,8 +22,9 @@ const mantenimientoRoutes = require('./routes/mantenimiento');
 const refaccionesRoutes = require('./routes/refacciones');
 const historialRoutes = require('./routes/historial');
 const estadisticasRoutes = require('./routes/estadisticas');
+const authRoutes = require('./routes/auth'); // 👈 NUEVA RUTA
 
-// 🚏 Usar rutas (todas en plural para que coincidan con tu frontend Angular)
+// Usar rutas
 app.use('/api/areas', areasRoutes);
 app.use('/api/tipos', tiposRoutes);
 app.use('/api/equipos', equiposRoutes);
@@ -31,13 +32,15 @@ app.use('/api/mantenimientos', mantenimientoRoutes);
 app.use('/api/refacciones', refaccionesRoutes);
 app.use('/api/historial', historialRoutes);
 app.use('/api/estadisticas', estadisticasRoutes);
+app.use('/api/auth', authRoutes); // 👈 NUEVA RUTA
 
-// 🏠 Ruta principal de prueba
+// Ruta principal
 app.get('/', (req, res) => {
-  res.json({
+  res.json({ 
     mensaje: '🏨 API Hotel Mantenimiento con Firebase',
     estado: '✅ Operativo',
     endpoints: {
+      auth: '/api/auth/login',
       areas: '/api/areas',
       tipos: '/api/tipos',
       equipos: '/api/equipos',
@@ -49,8 +52,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// 🚀 Iniciar servidor
 app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en puerto: ${PORT}`);
-  console.log(`✅ Conectado a Firebase Firestore`);
+  console.log('✅ Conectado a Firebase Firestore');
 });
