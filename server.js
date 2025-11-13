@@ -22,7 +22,8 @@ const mantenimientoRoutes = require('./routes/mantenimiento');
 const refaccionesRoutes = require('./routes/refacciones');
 const historialRoutes = require('./routes/historial');
 const estadisticasRoutes = require('./routes/estadisticas');
-const authRoutes = require('./routes/auth'); // 👈 NUEVA RUTA
+const authRoutes = require('./routes/auth');
+const proveedoresRoutes = require('./routes/proveedores'); // 👈 NUEVO
 
 // Usar rutas
 app.use('/api/areas', areasRoutes);
@@ -32,13 +33,15 @@ app.use('/api/mantenimientos', mantenimientoRoutes);
 app.use('/api/refacciones', refaccionesRoutes);
 app.use('/api/historial', historialRoutes);
 app.use('/api/estadisticas', estadisticasRoutes);
-app.use('/api/auth', authRoutes); // 👈 NUEVA RUTA
+app.use('/api/auth', authRoutes);
+app.use('/api/proveedores', proveedoresRoutes); // 👈 NUEVO
 
 // Ruta principal
 app.get('/', (req, res) => {
   res.json({ 
     mensaje: '🏨 API Hotel Mantenimiento con Firebase',
     estado: '✅ Operativo',
+    version: '2.0.0',
     endpoints: {
       auth: '/api/auth/login',
       areas: '/api/areas',
@@ -47,7 +50,8 @@ app.get('/', (req, res) => {
       mantenimientos: '/api/mantenimientos',
       refacciones: '/api/refacciones',
       historial: '/api/historial',
-      estadisticas: '/api/estadisticas'
+      estadisticas: '/api/estadisticas',
+      proveedores: '/api/proveedores' // 👈 NUEVO
     }
   });
 });
